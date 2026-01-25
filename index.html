@@ -77,12 +77,19 @@
         .player-overlay {
             position: absolute;
             width: 50px;
-            height: 80px;
+            height: 120px;
             display: flex;
+            flex-direction: column;
             align-items: center;
             justify-content: center;
             pointer-events: none;
             z-index: 10;
+        }
+
+        .player-position {
+            margin-top: 5px;
+            font-size: 12px;
+            color: #4ecdc4;
         }
 
         .player {
@@ -162,6 +169,7 @@
             <div class="dungeon-strip" id="dungeon"></div>
             <div class="player-overlay">
                 <div class="player"></div>
+                <div class="player-position" id="player-pos">0</div>
             </div>
         </div>
 
@@ -190,6 +198,7 @@
 
         const dungeonElement = document.getElementById('dungeon');
         const positionDisplay = document.getElementById('position');
+        const playerPosDisplay = document.getElementById('player-pos');
         const btnLeft = document.getElementById('btn-left');
         const btnRight = document.getElementById('btn-right');
 
@@ -200,13 +209,6 @@
             for (let i = 0; i < DUNGEON_LENGTH; i++) {
                 const tile = document.createElement('div');
                 tile.className = `tile ${dungeon[i].type}`;
-
-                // Add position number for debugging
-                const posLabel = document.createElement('span');
-                posLabel.style.cssText = 'position:absolute;bottom:2px;font-size:10px;color:#555;';
-                posLabel.textContent = i;
-                tile.appendChild(posLabel);
-
                 dungeonElement.appendChild(tile);
             }
 
@@ -221,6 +223,7 @@
 
             dungeonElement.style.transform = `translateX(${offset}px)`;
             positionDisplay.textContent = playerPosition;
+            playerPosDisplay.textContent = playerPosition;
 
             // Update button states
             btnLeft.disabled = playerPosition <= 0 || dungeon[playerPosition - 1].type === 'wall';
