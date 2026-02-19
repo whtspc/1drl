@@ -38,12 +38,12 @@
         .dungeon-viewport {
             flex: 1;
             display: flex;
-            flex-direction: column;
             align-items: center;
             justify-content: center;
             overflow: hidden;
             background-color: #000;
             padding: 0 4px;
+            position: relative;
         }
 
         .dungeon-ascii {
@@ -55,7 +55,11 @@
         }
 
         .tile-hint {
-            margin-top: 12px;
+            position: absolute;
+            left: 0;
+            right: 0;
+            text-align: center;
+            bottom: 40%;
             font-size: 14px;
             color: #666;
         }
@@ -174,25 +178,13 @@
             return array;
         }
 
-        // Measure how many monospace characters fit in the viewport
-        function getVisibleChars() {
-            const viewport = document.querySelector('.dungeon-viewport');
-            const width = viewport.offsetWidth - 8; // account for padding
-            // Create a measurement element
-            const measure = document.createElement('span');
-            measure.style.fontFamily = 'monospace';
-            measure.style.fontSize = '24px';
-            measure.style.whiteSpace = 'pre';
-            measure.style.visibility = 'hidden';
-            measure.style.position = 'absolute';
-            measure.textContent = 'X';
-            document.body.appendChild(measure);
-            const charWidth = measure.getBoundingClientRect().width;
-            document.body.removeChild(measure);
-            let count = Math.floor(width / charWidth);
-            // Ensure odd so player can be centered
-            if (count % 2 === 0) count--;
-            return Math.max(count, 5);
+        // Find which hall the player is currently in
+        function getCurrentHall() {
+            const tile = dungeon[playerPosition];
+            if (tile.hallId !== undefined) {
+                return halls[tile.hallId];
+            }
+            return null;
         }
 
         // Generate a random level with halls, doors, and stairs
@@ -311,28 +303,27 @@
         }
 
         function updateView() {
-            const numChars = getVisibleChars();
-            const half = Math.floor(numChars / 2);
+            const hall = getCurrentHall();
+            if (!hall) return;
 
-            // Build the ASCII view centered on the player
-            let html = '';
-            for (let offset = -half; offset <= half; offset++) {
-                const pos = playerPosition + offset;
-                if (offset === 0) {
+            // Render only the tiles in the current room, with walls on each end
+            let html = '<span class="char-wall">#</span>';
+            for (let i = 0; i < hall.width; i++) {
+                const pos = hall.startIndex + i;
+                if (pos === playerPosition) {
                     html += '<span class="char-player">@</span>';
-                } else if (pos < 0 || pos >= dungeonLength) {
-                    html += '<span class="char-void"> </span>';
                 } else {
                     const tile = dungeon[pos];
                     const ch = TILE_CHARS[tile.type] || '?';
                     html += `<span class="char-${tile.type}">${ch}</span>`;
                 }
             }
+            html += '<span class="char-wall">#</span>';
 
             dungeonElement.innerHTML = html;
 
             // Update info
-            positionDisplay.textContent = `Level ${currentLevel} - Pos ${playerPosition}`;
+            positionDisplay.textContent = `Level ${currentLevel} - Room ${hall.id + 1}`;
 
             // Show hint about current tile
             const currentTile = dungeon[playerPosition];
