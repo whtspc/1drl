@@ -194,10 +194,49 @@
             dungeon = [];
             doorConnections = {};
 
-            // Create halls with random widths
+            // Plan door connections first (just hall pairs, no positions yet)
+            const plannedConnections = [];
+            const doorsPerHall = new Array(numHalls).fill(0);
+
+            // Minimum spanning tree to guarantee connectivity
+            const connected = new Set([0]);
+            const unconnected = new Set();
+            for (let i = 1; i < numHalls; i++) {
+                unconnected.add(i);
+            }
+
+            while (unconnected.size > 0) {
+                const connectedArr = Array.from(connected);
+                const unconnectedArr = Array.from(unconnected);
+                const fromHall = connectedArr[randInt(0, connectedArr.length - 1)];
+                const toHall = unconnectedArr[randInt(0, unconnectedArr.length - 1)];
+
+                plannedConnections.push([fromHall, toHall]);
+                doorsPerHall[fromHall]++;
+                doorsPerHall[toHall]++;
+
+                connected.add(toHall);
+                unconnected.delete(toHall);
+            }
+
+            // Extra random door connections (0 or 1)
+            const extraConnections = randInt(0, 1);
+            for (let i = 0; i < extraConnections; i++) {
+                const fromHall = randInt(0, numHalls - 1);
+                let toHall = randInt(0, numHalls - 1);
+                if (toHall === fromHall) {
+                    toHall = (toHall + 1) % numHalls;
+                }
+                plannedConnections.push([fromHall, toHall]);
+                doorsPerHall[fromHall]++;
+                doorsPerHall[toHall]++;
+            }
+
+            // Create halls sized to fit their doors with floor space to spare
             let currentIndex = 0;
             for (let i = 0; i < numHalls; i++) {
-                const width = randInt(2, 15);
+                const minWidth = doorsPerHall[i] + 2;
+                const width = Math.max(randInt(2, 15), minWidth);
                 halls.push({
                     id: i,
                     startIndex: currentIndex,
@@ -221,34 +260,9 @@
                 }
             }
 
-            // Create door connections using minimum spanning tree
-            const connected = new Set([0]);
-            const unconnected = new Set();
-            for (let i = 1; i < numHalls; i++) {
-                unconnected.add(i);
-            }
-
-            while (unconnected.size > 0) {
-                const connectedArr = Array.from(connected);
-                const unconnectedArr = Array.from(unconnected);
-                const fromHall = connectedArr[randInt(0, connectedArr.length - 1)];
-                const toHall = unconnectedArr[randInt(0, unconnectedArr.length - 1)];
-
-                createDoorConnection(fromHall, toHall);
-
-                connected.add(toHall);
-                unconnected.delete(toHall);
-            }
-
-            // Extra random door connections
-            const extraConnections = randInt(0, 3);
-            for (let i = 0; i < extraConnections; i++) {
-                const fromHall = randInt(0, numHalls - 1);
-                let toHall = randInt(0, numHalls - 1);
-                if (toHall === fromHall) {
-                    toHall = (toHall + 1) % numHalls;
-                }
-                createDoorConnection(fromHall, toHall);
+            // Now place all planned door connections
+            for (const [fromHallId, toHallId] of plannedConnections) {
+                createDoorConnection(fromHallId, toHallId);
             }
 
             // Place stairs in a random hall (not the first one)
