@@ -188,6 +188,7 @@
         let playerHp = 3;
         const playerMaxHp = 3;
         let playerFacing = 1; // 1 = right, -1 = left
+        let lastActionWasTurn = false;
         let enemies = []; // {pos, hp, hallId, state: 'move'|'attack', char, name}
 
         const dungeonElement = document.getElementById('dungeon');
@@ -470,20 +471,25 @@
 
             const hallEnemies = enemiesInHall(hall.id);
 
-            // Build telegraph row (shows enemy intents above the dungeon line)
+            // Build telegraph row (shows enemy intents and player facing above the dungeon line)
             let telegraphHtml = ' '; // wall spacer
             for (let i = 0; i < hall.width; i++) {
                 const pos = hall.startIndex + i;
-                const enemy = enemyAt(pos);
-                if (enemy) {
-                    if (enemy.state === 'move') {
-                        const dir = playerPosition > enemy.pos ? '→' : playerPosition < enemy.pos ? '←' : '·';
-                        telegraphHtml += `<span class="telegraph-move">${dir}</span>`;
-                    } else if (enemy.state === 'attack') {
-                        telegraphHtml += '<span class="telegraph-attack">!</span>';
-                    }
+                if (pos === playerPosition) {
+                    const facingChar = playerFacing === 1 ? '→' : '←';
+                    telegraphHtml += `<span class="char-player">${facingChar}</span>`;
                 } else {
-                    telegraphHtml += ' ';
+                    const enemy = enemyAt(pos);
+                    if (enemy) {
+                        if (enemy.state === 'move') {
+                            const dir = playerPosition > enemy.pos ? '→' : playerPosition < enemy.pos ? '←' : '·';
+                            telegraphHtml += `<span class="telegraph-move">${dir}</span>`;
+                        } else if (enemy.state === 'attack') {
+                            telegraphHtml += '<span class="telegraph-attack">!</span>';
+                        }
+                    } else {
+                        telegraphHtml += ' ';
+                    }
                 }
             }
             telegraphHtml += ' '; // wall spacer
@@ -520,6 +526,9 @@
             // Show hint about current tile
             if (playerHp <= 0) {
                 // Keep death message
+            } else if (lastActionWasTurn) {
+                const dirName = playerFacing === 1 ? 'right' : 'left';
+                tileHint.textContent = `Turned to face ${dirName}`;
             } else {
                 const currentTile = dungeon[playerPosition];
                 switch (currentTile.type) {
@@ -536,11 +545,12 @@
 
             // Update button states
             const dead = playerHp <= 0;
-            const canMoveLeft = !dead && playerPosition > hall.startIndex;
-            const canMoveRight = !dead && playerPosition < hall.endIndex;
+            // Left/right always enabled (even at walls you can turn to face that direction)
+            const canActLeft = !dead && (playerFacing !== -1 || playerPosition > hall.startIndex);
+            const canActRight = !dead && (playerFacing !== 1 || playerPosition < hall.endIndex);
 
-            btnLeft.disabled = !canMoveLeft;
-            btnRight.disabled = !canMoveRight;
+            btnLeft.disabled = !canActLeft;
+            btnRight.disabled = !canActRight;
 
             const curTile = dungeon[playerPosition];
             const canEnter = !dead && (curTile.type === 'door' || curTile.type === 'stairs');
@@ -556,7 +566,13 @@
 
         function movePlayer(direction) {
             playerTurn(() => {
-                playerFacing = direction;
+                // If not facing this direction, spend the turn turning
+                if (playerFacing !== direction) {
+                    playerFacing = direction;
+                    lastActionWasTurn = true;
+                    return;
+                }
+                lastActionWasTurn = false;
                 const newPosition = playerPosition + direction;
                 if (newPosition < 0 || newPosition >= dungeonLength) return;
                 if (dungeon[newPosition].type === 'wall') return;
@@ -567,6 +583,7 @@
         }
 
         function enterDoorOrStairs() {
+            lastActionWasTurn = false;
             if (playerHp <= 0) {
                 // Restart on death
                 playerHp = playerMaxHp;
@@ -598,6 +615,7 @@
         }
 
         function doAttack() {
+            lastActionWasTurn = false;
             playerTurn(() => playerAttack());
         }
 
