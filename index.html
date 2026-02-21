@@ -38,6 +38,7 @@
         .dungeon-viewport {
             flex: 1;
             display: flex;
+            flex-direction: column;
             align-items: center;
             justify-content: center;
             overflow: hidden;
@@ -55,13 +56,11 @@
         }
 
         .tile-hint {
-            position: absolute;
-            left: 0;
-            right: 0;
             text-align: center;
-            bottom: 40%;
+            margin-top: 16px;
             font-size: 14px;
             color: #666;
+            min-height: 1.2em;
         }
 
         .char-player { color: #4ecdc4; font-weight: bold; }
@@ -70,6 +69,25 @@
         .char-door   { color: #c89632; }
         .char-stairs { color: #ffd700; font-weight: bold; }
         .char-void   { color: #000; }
+        .char-enemy  { color: #e74c3c; font-weight: bold; }
+
+        .telegraph-row {
+            font-family: monospace;
+            font-size: 14px;
+            white-space: pre;
+            line-height: 1.2;
+            text-align: center;
+            height: 1.2em;
+        }
+        .telegraph-move { color: #e7a43c; }
+        .telegraph-attack { color: #e74c3c; font-weight: bold; }
+
+        .hp-display {
+            font-size: 16px;
+            color: #e74c3c;
+            padding: 4px 10px;
+            text-align: center;
+        }
 
         /* Controls area */
         .controls {
@@ -120,6 +138,19 @@
         .control-btn.enter-btn.hidden {
             visibility: hidden;
         }
+
+        .control-btn.attack-btn {
+            background-color: #1f0a0a;
+            border-color: #5a2a2a;
+        }
+
+        .control-btn.attack-btn:active:not(:disabled) {
+            background-color: #3a1a1a;
+        }
+
+        .control-btn.attack-btn.hidden {
+            visibility: hidden;
+        }
     </style>
 </head>
 <body>
@@ -129,7 +160,10 @@
             <div id="position">Level 1 - Pos 0</div>
         </div>
 
+        <div class="hp-display" id="hp-display"></div>
+
         <div class="dungeon-viewport">
+            <div id="telegraph-row" class="telegraph-row"></div>
             <div class="dungeon-ascii" id="dungeon"></div>
             <div class="tile-hint" id="tile-hint"></div>
         </div>
@@ -137,6 +171,7 @@
         <div class="controls">
             <button class="control-btn" id="btn-left" aria-label="Move Left">&#9664;</button>
             <button class="control-btn enter-btn" id="btn-enter" aria-label="Enter">&#9660;</button>
+            <button class="control-btn attack-btn" id="btn-attack" aria-label="Attack">&#9876;</button>
             <button class="control-btn" id="btn-right" aria-label="Move Right">&#9654;</button>
         </div>
     </div>
@@ -149,12 +184,21 @@
         let halls = [];
         let doorConnections = {};
 
+        // Battle state
+        let playerHp = 3;
+        const playerMaxHp = 3;
+        let playerFacing = 1; // 1 = right, -1 = left
+        let enemies = []; // {pos, hp, hallId, state: 'move'|'attack', char, name}
+
         const dungeonElement = document.getElementById('dungeon');
         const positionDisplay = document.getElementById('position');
         const tileHint = document.getElementById('tile-hint');
+        const telegraphRow = document.getElementById('telegraph-row');
+        const hpDisplay = document.getElementById('hp-display');
         const btnLeft = document.getElementById('btn-left');
         const btnRight = document.getElementById('btn-right');
         const btnEnter = document.getElementById('btn-enter');
+        const btnAttack = document.getElementById('btn-attack');
 
         // ASCII characters for each tile type
         const TILE_CHARS = {
@@ -279,6 +323,37 @@
             dungeon[stairsPos] = { type: 'stairs', hallId: stairsHallId };
 
             playerPosition = halls[0].startIndex;
+
+            // Spawn enemies in non-starting halls
+            enemies = [];
+            for (let i = 1; i < halls.length; i++) {
+                // Skip the stairs hall sometimes to keep it lighter
+                if (i === stairsHallId && Math.random() < 0.5) continue;
+                // Each hall has a chance of 1-2 slimes
+                const numSlimes = randInt(0, 1);
+                for (let s = 0; s < numSlimes; s++) {
+                    const hall = halls[i];
+                    // Find a floor tile that isn't the stairs
+                    const candidates = [];
+                    for (let t = 0; t < hall.width; t++) {
+                        const pos = hall.startIndex + t;
+                        if (dungeon[pos].type === 'floor') {
+                            candidates.push(pos);
+                        }
+                    }
+                    if (candidates.length > 0) {
+                        const pos = candidates[randInt(0, candidates.length - 1)];
+                        enemies.push({
+                            pos: pos,
+                            hp: 1,
+                            hallId: i,
+                            state: 'move', // starts wanting to move toward player
+                            char: 's',
+                            name: 'slime'
+                        });
+                    }
+                }
+            }
         }
 
         function createDoorConnection(fromHallId, toHallId) {
@@ -312,6 +387,79 @@
             return floorPositions[randInt(0, floorPositions.length - 1)];
         }
 
+        // Get enemies in the current hall
+        function enemiesInHall(hallId) {
+            return enemies.filter(e => e.hallId === hallId);
+        }
+
+        // Check if a position has an enemy
+        function enemyAt(pos) {
+            return enemies.find(e => e.pos === pos);
+        }
+
+        // Process enemy turns (called after player acts)
+        function processEnemyTurns() {
+            const hall = getCurrentHall();
+            if (!hall) return;
+
+            const hallEnemies = enemiesInHall(hall.id);
+
+            for (const enemy of hallEnemies) {
+                if (enemy.state === 'attack') {
+                    // Attack the tile toward the player
+                    const dir = playerPosition > enemy.pos ? 1 : -1;
+                    const attackPos = enemy.pos + dir;
+                    if (attackPos === playerPosition) {
+                        playerHp--;
+                    }
+                    // After attacking, switch to move
+                    enemy.state = 'move';
+                } else if (enemy.state === 'move') {
+                    // Move one tile toward the player
+                    const dir = playerPosition > enemy.pos ? 1 : playerPosition < enemy.pos ? -1 : 0;
+                    if (dir !== 0) {
+                        const newPos = enemy.pos + dir;
+                        // Don't move onto walls, other enemies, or the player
+                        if (newPos >= hall.startIndex && newPos <= hall.endIndex &&
+                            dungeon[newPos].type !== 'wall' &&
+                            !enemyAt(newPos) &&
+                            newPos !== playerPosition) {
+                            enemy.pos = newPos;
+                        }
+                    }
+                    // After moving, switch to attack
+                    enemy.state = 'attack';
+                }
+            }
+        }
+
+        // Player takes a turn (move, attack, or interact), then enemies act
+        function playerTurn(action) {
+            if (playerHp <= 0) return;
+
+            action();
+            processEnemyTurns();
+
+            if (playerHp <= 0) {
+                // Player died
+                tileHint.textContent = 'You died! Press Enter to restart.';
+            }
+
+            updateView();
+        }
+
+        // Player attack: hit the tile you're facing
+        function playerAttack() {
+            const attackPos = playerPosition + playerFacing;
+            const target = enemyAt(attackPos);
+            if (target) {
+                target.hp--;
+                if (target.hp <= 0) {
+                    enemies = enemies.filter(e => e !== target);
+                }
+            }
+        }
+
         function renderDungeon() {
             updateView();
         }
@@ -320,66 +468,127 @@
             const hall = getCurrentHall();
             if (!hall) return;
 
-            // Render only the tiles in the current room, with walls on each end
+            const hallEnemies = enemiesInHall(hall.id);
+
+            // Build telegraph row (shows enemy intents above the dungeon line)
+            let telegraphHtml = ' '; // wall spacer
+            for (let i = 0; i < hall.width; i++) {
+                const pos = hall.startIndex + i;
+                const enemy = enemyAt(pos);
+                if (enemy) {
+                    if (enemy.state === 'move') {
+                        const dir = playerPosition > enemy.pos ? '→' : playerPosition < enemy.pos ? '←' : '·';
+                        telegraphHtml += `<span class="telegraph-move">${dir}</span>`;
+                    } else if (enemy.state === 'attack') {
+                        telegraphHtml += '<span class="telegraph-attack">!</span>';
+                    }
+                } else {
+                    telegraphHtml += ' ';
+                }
+            }
+            telegraphHtml += ' '; // wall spacer
+            telegraphRow.innerHTML = telegraphHtml;
+
+            // Render the dungeon line
             let html = '<span class="char-wall">#</span>';
             for (let i = 0; i < hall.width; i++) {
                 const pos = hall.startIndex + i;
                 if (pos === playerPosition) {
                     html += '<span class="char-player">@</span>';
                 } else {
-                    const tile = dungeon[pos];
-                    const ch = TILE_CHARS[tile.type] || '?';
-                    html += `<span class="char-${tile.type}">${ch}</span>`;
+                    const enemy = enemyAt(pos);
+                    if (enemy) {
+                        html += `<span class="char-enemy">${enemy.char}</span>`;
+                    } else {
+                        const tile = dungeon[pos];
+                        const ch = TILE_CHARS[tile.type] || '?';
+                        html += `<span class="char-${tile.type}">${ch}</span>`;
+                    }
                 }
             }
             html += '<span class="char-wall">#</span>';
 
             dungeonElement.innerHTML = html;
 
+            // HP display
+            const displayHp = Math.max(0, playerHp);
+            hpDisplay.innerHTML = '♥'.repeat(displayHp) + '<span style="color:#444">' + '♥'.repeat(playerMaxHp - displayHp) + '</span>';
+
             // Update info
             positionDisplay.textContent = `Level ${currentLevel} - Room ${hall.id + 1}`;
 
             // Show hint about current tile
-            const currentTile = dungeon[playerPosition];
-            switch (currentTile.type) {
-                case 'door':
-                    tileHint.textContent = 'Door - press enter to go through';
-                    break;
-                case 'stairs':
-                    tileHint.textContent = 'Stairs - press enter to descend';
-                    break;
-                default:
-                    tileHint.textContent = '';
+            if (playerHp <= 0) {
+                // Keep death message
+            } else {
+                const currentTile = dungeon[playerPosition];
+                switch (currentTile.type) {
+                    case 'door':
+                        tileHint.textContent = 'Door - press ↓ to go through';
+                        break;
+                    case 'stairs':
+                        tileHint.textContent = 'Stairs - press ↓ to descend';
+                        break;
+                    default:
+                        tileHint.textContent = '';
+                }
             }
 
             // Update button states
-            const canMoveLeft = playerPosition > 0 && dungeon[playerPosition - 1].type !== 'wall';
-            const canMoveRight = playerPosition < dungeonLength - 1 && dungeon[playerPosition + 1].type !== 'wall';
+            const dead = playerHp <= 0;
+            const canMoveLeft = !dead && playerPosition > hall.startIndex;
+            const canMoveRight = !dead && playerPosition < hall.endIndex;
 
             btnLeft.disabled = !canMoveLeft;
             btnRight.disabled = !canMoveRight;
 
-            const canEnter = currentTile.type === 'door' || currentTile.type === 'stairs';
-            btnEnter.classList.toggle('hidden', !canEnter);
-            btnEnter.disabled = !canEnter;
+            const curTile = dungeon[playerPosition];
+            const canEnter = !dead && (curTile.type === 'door' || curTile.type === 'stairs');
+            const showEnter = canEnter || dead; // show enter when dead for restart
+            btnEnter.classList.toggle('hidden', !showEnter);
+            btnEnter.disabled = !showEnter;
+
+            // Attack button: show when enemies are in the room
+            const canAttack = !dead && hallEnemies.length > 0;
+            btnAttack.classList.toggle('hidden', !canAttack);
+            btnAttack.disabled = !canAttack;
         }
 
         function movePlayer(direction) {
-            const newPosition = playerPosition + direction;
-            if (newPosition < 0 || newPosition >= dungeonLength) return;
-            if (dungeon[newPosition].type === 'wall') return;
-            playerPosition = newPosition;
-            updateView();
+            playerTurn(() => {
+                playerFacing = direction;
+                const newPosition = playerPosition + direction;
+                if (newPosition < 0 || newPosition >= dungeonLength) return;
+                if (dungeon[newPosition].type === 'wall') return;
+                // Can't walk into an enemy
+                if (enemyAt(newPosition)) return;
+                playerPosition = newPosition;
+            });
         }
 
         function enterDoorOrStairs() {
+            if (playerHp <= 0) {
+                // Restart on death
+                playerHp = playerMaxHp;
+                currentLevel = 1;
+                generateLevel();
+                renderDungeon();
+                return;
+            }
+
             const currentTile = dungeon[playerPosition];
 
             if (currentTile.type === 'door') {
                 const targetPos = doorConnections[playerPosition];
                 if (targetPos !== undefined) {
-                    playerPosition = targetPos;
-                    updateView();
+                    // Can't use door if enemy is standing on the target
+                    if (enemyAt(targetPos)) {
+                        tileHint.textContent = 'Something blocks the other side!';
+                        return;
+                    }
+                    playerTurn(() => {
+                        playerPosition = targetPos;
+                    });
                 }
             } else if (currentTile.type === 'stairs') {
                 currentLevel++;
@@ -388,10 +597,15 @@
             }
         }
 
+        function doAttack() {
+            playerTurn(() => playerAttack());
+        }
+
         // Button controls
         btnLeft.addEventListener('click', () => movePlayer(-1));
         btnRight.addEventListener('click', () => movePlayer(1));
         btnEnter.addEventListener('click', () => enterDoorOrStairs());
+        btnAttack.addEventListener('click', () => doAttack());
 
         // Touch controls (prevent double-firing)
         btnLeft.addEventListener('touchstart', (e) => {
@@ -406,6 +620,10 @@
             e.preventDefault();
             enterDoorOrStairs();
         });
+        btnAttack.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            doAttack();
+        });
 
         // Keyboard controls
         document.addEventListener('keydown', (e) => {
@@ -415,6 +633,8 @@
                 movePlayer(1);
             } else if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'Enter') {
                 enterDoorOrStairs();
+            } else if (e.key === ' ' || e.key === 'w' || e.key === 'ArrowUp') {
+                doAttack();
             }
         });
 
