@@ -7,7 +7,7 @@ export function playerAttack(gameState) {
     const attackPos = player.pos + player.facing;
     const target = enemyAt(enemies, attackPos);
     if (target) {
-        target.hp--;
+        target.hp -= player.damage;
         emit('playerAttacked', { pos: attackPos, target });
         if (target.hp <= 0) {
             gameState.enemies = gameState.enemies.filter(e => e !== target);

@@ -8,7 +8,6 @@ import { Registry } from './registry.js';
 //       cssClass: 'char-lava',
 //       walkable: true,
 //       hint: 'Lava - you take damage!',
-//       onEnter(gameState) { gameState.player.hp--; },
 //   });
 
 export const tileTypes = new Registry();
@@ -32,7 +31,7 @@ tileTypes.register('door', {
     cssClass: 'char-door',
     walkable: true,
     interactable: true,
-    hint: 'Door - press ↓ to go through',
+    hint: 'Door - press \u2193 to go through',
 });
 
 tileTypes.register('stairs', {
@@ -40,7 +39,14 @@ tileTypes.register('stairs', {
     cssClass: 'char-stairs',
     walkable: true,
     interactable: true,
-    hint: 'Stairs - press ↓ to descend',
+    hint: 'Stairs - press \u2193 to descend',
+});
+
+tileTypes.register('gold', {
+    char: '$',
+    cssClass: 'char-gold',
+    walkable: true,
+    hint: '',
 });
 
 // Look up tile display char from a dungeon tile object

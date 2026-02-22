@@ -1,10 +1,13 @@
-import { emit } from './events.js';
+import { emit, on } from './events.js';
+import { randInt } from './utils.js';
 import { createPlayer, resetPlayer } from './player.js';
 import { generateLevel } from './level.js';
 import { playerAttack, processEnemyTurns, getCurrentHall } from './combat.js';
-import { enemyAt } from './enemies.js';
-import { initRenderer, render, showDeathMessage, showMessage } from './renderer.js';
+import { enemyAt, enemyTypes } from './enemies.js';
+import { initRenderer, render, renderShop, showDeathMessage, showMessage } from './renderer.js';
 import { initInput } from './input.js';
+import { isShopOpen, openShop, closeShop, shopNavigate, shopBuy } from './shop.js';
+import { useItem } from './items.js';
 
 // Central game state - passed to all systems that need it
 const gameState = {
@@ -17,6 +20,15 @@ const gameState = {
     currentLevel: 1,
     lastActionWasTurn: false,
 };
+
+// --- Gold drops from enemies ---
+on('enemyKilled', ({ enemy }) => {
+    const def = enemyTypes.get(enemy.type);
+    if (def && def.goldDrop) {
+        const amount = randInt(def.goldDrop.min, def.goldDrop.max);
+        gameState.player.gold += amount;
+    }
+});
 
 // --- Core game actions ---
 
@@ -39,6 +51,9 @@ function playerTurn(action) {
     processEnemyTurns(gameState);
     emit('turnEnd');
 
+    // Pick up gold if standing on a gold tile
+    checkGoldPickup();
+
     if (gameState.player.hp <= 0) {
         emit('playerDied');
         showDeathMessage();
@@ -47,7 +62,24 @@ function playerTurn(action) {
     render(gameState);
 }
 
+function checkGoldPickup() {
+    const tile = gameState.dungeon[gameState.player.pos];
+    if (tile && tile.type === 'gold') {
+        gameState.player.gold += tile.amount || 1;
+        emit('goldPickup', { amount: tile.amount });
+        // Replace gold tile with floor
+        gameState.dungeon[gameState.player.pos] = { type: 'floor', hallId: tile.hallId };
+    }
+}
+
 function movePlayer(direction) {
+    // Shop mode: navigate shop items
+    if (isShopOpen()) {
+        shopNavigate(direction);
+        renderShop(gameState);
+        return;
+    }
+
     playerTurn(() => {
         const { player, dungeon, dungeonLength } = gameState;
         if (player.facing !== direction) {
@@ -67,6 +99,20 @@ function movePlayer(direction) {
 }
 
 function interact() {
+    // Shop mode: buy selected item or leave
+    if (isShopOpen()) {
+        const result = shopBuy(gameState);
+        if (result === 'leave') {
+            startLevel();
+        } else if (result === 'cantAfford') {
+            renderShop(gameState);
+            showMessage('Not enough gold!');
+        } else {
+            renderShop(gameState);
+        }
+        return;
+    }
+
     gameState.lastActionWasTurn = false;
     const { player, dungeon, doorConnections } = gameState;
 
@@ -97,13 +143,25 @@ function interact() {
         const oldLevel = gameState.currentLevel;
         gameState.currentLevel++;
         emit('levelChanged', { from: oldLevel, to: gameState.currentLevel });
-        startLevel();
+        // Open shop before next level
+        openShop(gameState);
+        renderShop(gameState);
     }
 }
 
 function doAttack() {
+    if (isShopOpen()) return;
     gameState.lastActionWasTurn = false;
     playerTurn(() => playerAttack(gameState));
+}
+
+function doUseItem() {
+    if (isShopOpen()) return;
+    gameState.lastActionWasTurn = false;
+    const used = useItem(gameState);
+    if (used) {
+        playerTurn(() => {}); // using item costs a turn
+    }
 }
 
 // --- Initialize ---
@@ -114,8 +172,15 @@ initInput({
     moveRight: () => movePlayer(1),
     interact,
     attack: doAttack,
+    useItem: doUseItem,
 });
 
-window.addEventListener('resize', () => render(gameState));
+window.addEventListener('resize', () => {
+    if (isShopOpen()) {
+        renderShop(gameState);
+    } else {
+        render(gameState);
+    }
+});
 
 startLevel();
