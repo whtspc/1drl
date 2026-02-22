@@ -35,6 +35,34 @@
             border-bottom: 1px solid #333;
         }
 
+        .status-row {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 16px;
+            padding: 4px 10px;
+        }
+
+        .hp-display {
+            font-size: 16px;
+            color: #e74c3c;
+        }
+
+        .gold-display {
+            font-size: 16px;
+            color: #ffd700;
+        }
+
+        .items-display {
+            font-size: 16px;
+            color: #4ecdc4;
+            letter-spacing: 2px;
+        }
+
+        .item-icon {
+            color: #4ecdc4;
+        }
+
         .dungeon-viewport {
             flex: 1;
             display: flex;
@@ -63,13 +91,17 @@
             min-height: 1.2em;
         }
 
-        .char-player { color: #4ecdc4; font-weight: bold; }
-        .char-floor  { color: #444; }
-        .char-wall   { color: #666; }
-        .char-door   { color: #c89632; }
-        .char-stairs { color: #ffd700; font-weight: bold; }
-        .char-void   { color: #000; }
-        .char-enemy  { color: #e74c3c; font-weight: bold; }
+        .char-player   { color: #4ecdc4; font-weight: bold; }
+        .char-floor    { color: #444; }
+        .char-wall     { color: #666; }
+        .char-door     { color: #c89632; }
+        .char-stairs   { color: #ffd700; font-weight: bold; }
+        .char-void     { color: #000; }
+        .char-gold     { color: #ffd700; font-weight: bold; }
+        .char-enemy    { color: #e74c3c; font-weight: bold; }
+        .char-bat      { color: #9b59b6; font-weight: bold; }
+        .char-skeleton { color: #ecf0f1; font-weight: bold; }
+        .char-wizard   { color: #3498db; font-weight: bold; }
 
         .telegraph-row {
             font-family: monospace;
@@ -82,28 +114,21 @@
         .telegraph-move { color: #e7a43c; }
         .telegraph-attack { color: #e74c3c; font-weight: bold; }
 
-        .hp-display {
-            font-size: 16px;
-            color: #e74c3c;
-            padding: 4px 10px;
-            text-align: center;
-        }
-
         /* Controls area */
         .controls {
             display: flex;
             justify-content: space-around;
             align-items: center;
-            padding: 20px;
+            padding: 16px;
             background-color: #000;
-            gap: 20px;
+            gap: 12px;
             border-top: 1px solid #333;
         }
 
         .control-btn {
-            width: 100px;
-            height: 80px;
-            font-size: 36px;
+            width: 80px;
+            height: 70px;
+            font-size: 30px;
             border: 1px solid #444;
             border-radius: 10px;
             background-color: #111;
@@ -151,6 +176,19 @@
         .control-btn.attack-btn.hidden {
             visibility: hidden;
         }
+
+        .control-btn.item-btn {
+            background-color: #0a1a1f;
+            border-color: #2a4a5a;
+        }
+
+        .control-btn.item-btn:active:not(:disabled) {
+            background-color: #1a2a3a;
+        }
+
+        .control-btn.item-btn.hidden {
+            visibility: hidden;
+        }
     </style>
 </head>
 <body>
@@ -160,7 +198,11 @@
             <div id="position">Level 1 - Pos 0</div>
         </div>
 
-        <div class="hp-display" id="hp-display"></div>
+        <div class="status-row">
+            <div class="hp-display" id="hp-display"></div>
+            <div class="gold-display" id="gold-display">$ 0</div>
+            <div class="items-display" id="items-display"></div>
+        </div>
 
         <div class="dungeon-viewport">
             <div id="telegraph-row" class="telegraph-row"></div>
@@ -172,6 +214,7 @@
             <button class="control-btn" id="btn-left" aria-label="Move Left">&#9664;</button>
             <button class="control-btn enter-btn" id="btn-enter" aria-label="Enter">&#9660;</button>
             <button class="control-btn attack-btn" id="btn-attack" aria-label="Attack">&#9876;</button>
+            <button class="control-btn item-btn hidden" id="btn-item" aria-label="Use Item">&#9830;</button>
             <button class="control-btn" id="btn-right" aria-label="Move Right">&#9654;</button>
         </div>
     </div>

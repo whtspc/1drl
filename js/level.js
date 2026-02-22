@@ -89,6 +89,26 @@ export function generateLevel(currentLevel) {
     }
     dungeon[stairsPos] = { type: 'stairs', hallId: stairsHallId };
 
+    // Scatter gold tiles in non-starting halls
+    const numGoldTiles = randInt(cfg.goldTiles.min, cfg.goldTiles.max);
+    for (let g = 0; g < numGoldTiles; g++) {
+        const hallIdx = randInt(1, halls.length - 1);
+        const hall = halls[hallIdx];
+        const candidates = [];
+        for (let t = 0; t < hall.width; t++) {
+            const pos = hall.startIndex + t;
+            if (dungeon[pos].type === 'floor') candidates.push(pos);
+        }
+        if (candidates.length > 0) {
+            const pos = candidates[randInt(0, candidates.length - 1)];
+            dungeon[pos] = {
+                type: 'gold',
+                hallId: hallIdx,
+                amount: randInt(cfg.goldPerTile.min, cfg.goldPerTile.max),
+            };
+        }
+    }
+
     // Spawn enemies in non-starting halls
     const enemies = [];
     for (let i = 1; i < halls.length; i++) {
